@@ -1,0 +1,283 @@
+#!/bin/bash
+
+usage() {
+cat <<EOL
+Usage: $0 <FILE> <COMMAND>
+
+Toggles blocks of code within shell-like files (that use \`#\` for comment lines).
+
+Commands:
+  set <GROUP> [MODE]  Enable the specified mode and disable all other modes
+                      in the same group. If no mode is specified, the first
+                      mode in the file will be enabled.
+  get [GROUP]         Show active mode(s) (of the specified group).
+  list [GROUP]        List available modes (of the specified group).
+  groups              List available groups.
+
+Mode block definition within <FILE>:
+
+  Start a mode block with a line like \`##! { toggle GROUP:MODE }\`.
+  All subsequent lines up to the next empty line will belong to that mode.
+  A mode is considered active, if it contains at least one line that is not a
+  comment.
+
+Example <FILE>:
+
+  # [...]
+
+  ##! { toggle feat/a:first }
+  echo 'feat/a: FIRST is active'
+  # a mode may have comments, but no empty lines
+  echo 'modes can have multiple lines'
+  
+  # this will not belong to feat/a:first anymore
+  echo 'This will always show'
+  
+  ##! { toggle feat/a:second }
+  #- # prefix lines with \`#- \` to mark disabled
+  #- echo 'feat/a: SECOND is active'
+  
+  # An empty mode can be defined for on/off switches
+  # Note: if it's empty, it won't ever show as "enabled"
+  ##! { toggle dark:off }
+  # add at least a comment to show as "enabled"
+  ##! { toggle dark:on }
+  #- echo 'dark is active'
+  
+  # [...]
+
+Examples:
+
+  $0 path/to/file.sh list feat/a
+    List available modes of group "feat/a" within specified file.
+
+  $0 path/to/file.sh set feat/a second
+    Disable \`feat/a:first\` block and enable \`feat/a:second\` block.
+
+EOL
+}
+
+if [ "$1" = "" -o "$1" = "-h" -o "$1" == "--help" ]; then
+    usage
+    exit 0
+fi
+
+FILE="$1"
+shift
+
+if ! [ -f "$FILE" -o -h "$FILE" ]; then
+  echo "'$FILE' is not a file." >&2
+  echo
+  usage
+  exit 1
+fi
+
+CMD="$1"
+shift
+
+#=================================== Utils  ===================================#
+
+__filter_active() {
+    grep " \[enabled\]\$" | cut -d ' ' -f 1
+}
+
+#================================== Commands ==================================#
+
+#------------------------------------ SET  ------------------------------------#
+
+__set_prg() {
+    GROUP="$1"
+    MODE="$2"
+    
+    cat <<EOL
+        BEGIN { group = ""; mode = ""; active = 0; default_enabled = 0 }
+        
+        # mode headline
+        match(\$0, /^ *##! *\{ *toggle +([^:]+):([^ ]+) +\}/, mm) {
+            group = mm[1]; mode = mm[2]; active = 0
+            if (group != "$GROUP") {
+                # ignore other groups
+                group = ""; mode = ""
+            } else {
+                if (mode == "$MODE" || "$MODE" == "" && default_enabled == 0) {
+                    active = 1
+                    default_enabled = 1;
+                }
+            }
+            print; next
+        }
+        
+        mode == "" {
+            print; next
+        }
+        
+        # empty line
+        /^ *\$/ {
+            group = ""; mode = ""
+            print; next
+        }
+        
+        active == 1 {
+            if (match(\$0, /^ *#- (.*)+/, mm)) {
+                print mm[1]; next
+            }
+            print; next
+        }
+        
+        active == 0 {
+            if (match(\$0, /^ *#- (.*)+/, mm)) {
+                print; next
+            }
+            printf "#- "; print; next
+        }
+EOL
+}
+
+cmd_set() {
+    if [ $# -lt 1 -o $# -gt 2 ]; then
+        echo '`set` command accepts one or two arguments: `GROUP [MODE]`' >&2
+        exit 2
+    fi
+    GROUP="$1"
+    MODE="$2"
+    current="$(cmd_list "$GROUP")"
+    if [ -z "$MODE" ]; then
+        MODE="$(echo "$current" | head -n 1 | cut -d ' ' -f 1 | cut -d ':' -f 2)"
+        echo "no mode specified, using default: $GROUP:$MODE"
+    fi
+    target="$GROUP:$MODE"
+    if [ -z "$(echo "$current" | grep -E "^$target(\$| )")" ]; then
+        echo "mode does not exist: '$target'" >&2
+        exit 3
+    fi
+    _active="$(echo "$current" | __filter_active)"
+    if [ "$_active" = "$target" ]; then
+        echo "already active: $target" >&2
+        exit 0
+    fi
+    echo "Replacing active mode $_active with $target"
+    gawk -e "$(__set_prg "$GROUP" "$MODE")" -i inplace "$FILE"
+}
+
+#------------------------------------ GET  ------------------------------------#
+
+cmd_get() {
+    if [ $# -gt 1 ]; then
+        echo '`get` command accepts at most one argument: `[GROUP]`' >&2
+        exit 2
+    fi
+    cmd_list "$@" | __filter_active
+}
+
+#------------------------------------ LIST ------------------------------------#
+
+__list_prg() {
+    cat <<EOL
+        BEGIN { group = ""; mode = ""; active = 0 }
+        
+        # mode headline
+        match(\$0, /^ *##! *\{ *toggle +([^:]+):([^ ]+) +\}/, mm) {
+            if (group != "") {
+                if (active == 1) {
+                    print group":"mode" [enabled]"
+                } else {
+                    print group":"mode
+                }
+            }
+            group = mm[1]; mode = mm[2]; active = 0
+            next
+        }
+        
+        mode == "" {
+            next
+        }
+        
+        # empty line
+        /^ *\$/ {
+            if (group != "") {
+                if (active == 1) {
+                    print group":"mode" [enabled]"
+                } else {
+                    print group":"mode
+                }
+                group = ""; mode = ""
+            }
+            next
+        }
+        
+        # disabled line
+        /^ *#- / {
+            next
+        }
+        
+        # mode scope, !empty && !disabled => mode is active
+        /[^ ]/ {
+            active = 1
+            next
+        }
+        
+        # just in case of missing newline at the end of the file
+        END {
+            if (group != "") {
+                if (active == 1) {
+                    print group":"mode" [enabled]"
+                } else {
+                    print group":"mode
+                }
+            }
+        }
+EOL
+}
+
+cmd_list() {
+    if [ $# -gt 1 ]; then
+        echo '`list` command accepts at most one argument: `[GROUP]`' >&2
+        exit 2
+    fi
+    res=$(gawk "$(__list_prg)" "$FILE")
+    if [ $# -eq 1 ]; then
+        res="$(echo "$res" | grep "^$1:")"
+    fi
+    if [ -z "$res" ]; then
+        echo "no results" >&2
+        exit 3
+    fi
+    echo "$res"
+}
+
+#----------------------------------- GROUPS -----------------------------------#
+
+cmd_groups() {
+    if [ $# -gt 0 ]; then
+        echo '`groups` command accepts no arguments' >&2
+        exit 2
+    fi
+    cmd_list | awk -F ':' '{print $1}' | sort | uniq
+}
+
+#=============================== Command Switch ===============================#
+
+case "$CMD" in
+    set)
+        cmd_set "$@"
+        ;;
+
+    get)
+        cmd_get "$@"
+        ;;
+
+    list)
+        cmd_list "$@"
+        ;;
+
+    groups)
+        cmd_groups "$@"
+        ;;
+
+    *)
+        echo "Unknown command '$CMD'." >&2
+        echo
+        usage
+        exit 2
+        ;;
+esac

@@ -1,0 +1,9 @@
+### NEXT RUN
+### It should still be feat/a:first
+
+PREFIX
+feat/a:first
+feat/a:first multiline
+IN_BETWEEN
+END
+

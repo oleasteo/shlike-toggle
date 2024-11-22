@@ -1,0 +1,30 @@
+### CMD: get dark
+
+dark:off
+
+---
+
+### CMD: set dark on
+
+Replacing active mode dark:off with dark:on
+
+---
+
+### CMD: get dark
+
+dark:on
+
+---
+
+### CMD: set dark off
+
+Replacing active mode dark:on with dark:off
+
+---
+
+### CMD: get dark
+
+dark:off
+
+---
+

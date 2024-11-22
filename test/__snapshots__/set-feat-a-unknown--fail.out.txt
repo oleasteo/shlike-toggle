@@ -1,0 +1,18 @@
+### CMD: get feat/a
+
+feat/a:first
+
+---
+
+### CMD: set feat/a unknown
+
+mode does not exist: 'feat/a:unknown'
+
+---
+
+### CMD: get feat/a
+
+feat/a:first
+
+---
+

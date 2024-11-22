@@ -1,0 +1,29 @@
+### CMD: list feat/a
+
+feat/a:first [enabled]
+feat/a:second
+
+---
+
+### CMD: list dark
+
+dark:off [enabled]
+dark:on
+
+---
+
+### CMD: list unknown
+
+no results
+
+---
+
+### CMD: list
+
+feat/a:first [enabled]
+feat/a:second
+dark:off [enabled]
+dark:on
+
+---
+

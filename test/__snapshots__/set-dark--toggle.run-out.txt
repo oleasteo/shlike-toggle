@@ -1,0 +1,19 @@
+### NEXT RUN
+### It should be dark:on
+
+PREFIX
+feat/a:first
+feat/a:first multiline
+IN_BETWEEN
+dark:on
+END
+
+### NEXT RUN
+### It should be dark:off
+
+PREFIX
+feat/a:first
+feat/a:first multiline
+IN_BETWEEN
+END
+

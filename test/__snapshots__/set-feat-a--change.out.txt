@@ -1,0 +1,24 @@
+### CMD: get feat/a
+
+feat/a:first
+
+---
+
+### CMD: set feat/a second
+
+Replacing active mode feat/a:first with feat/a:second
+
+---
+
+### CMD: set feat/a second
+
+already active: feat/a:second
+
+---
+
+### CMD: get feat/a
+
+feat/a:second
+
+---
+
